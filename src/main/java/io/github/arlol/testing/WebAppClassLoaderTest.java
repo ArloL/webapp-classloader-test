@@ -34,9 +34,9 @@ import org.slf4j.LoggerFactory;
 import com.jayway.awaitility.Duration;
 import com.jayway.awaitility.core.ConditionTimeoutException;
 
-public class WebAppTest {
+public class WebAppClassLoaderTest {
 
-	private static final Logger LOG = LoggerFactory.getLogger(WebAppTest.class);
+	private static final Logger LOG = LoggerFactory.getLogger(WebAppClassLoaderTest.class);
 	private static final File CATALINA_BASE = new File("target/tomcat-tmp");
 	private static final int DEPLOY_DURATION = 10;
 
@@ -47,37 +47,37 @@ public class WebAppTest {
 	private File contextFile;
 	private boolean testLeak = true;
 
-	public WebAppTest warFile(File warFile) {
+	public WebAppClassLoaderTest warFile(File warFile) {
 		this.warFile = warFile;
 		return this;
 	}
 
-	public WebAppTest pingEndPoint(String pingEndPoint) {
+	public WebAppClassLoaderTest pingEndPoint(String pingEndPoint) {
 		this.pingEndPoint = pingEndPoint;
 		return this;
 	}
 
-	public WebAppTest dumpFile(File dumpFile) {
+	public WebAppClassLoaderTest dumpFile(File dumpFile) {
 		this.dumpFile = dumpFile;
 		return this;
 	}
 
-	public WebAppTest deployDuration(long deployDuration) {
+	public WebAppClassLoaderTest deployDuration(long deployDuration) {
 		this.deployDuration = deployDuration;
 		return this;
 	}
 
-	public WebAppTest contextFile(File contextFile) {
+	public WebAppClassLoaderTest contextFile(File contextFile) {
 		this.contextFile = contextFile;
 		return this;
 	}
 
-	public WebAppTest testLeak(boolean testLeak) {
+	public WebAppClassLoaderTest testLeak(boolean testLeak) {
 		this.testLeak = testLeak;
 		return this;
 	}
 
-	public void run() throws WebAppTestException {
+	public void run() throws WebAppClassLoaderTestException {
 		checkArguments();
 
 		Tomcat tomcat = null;
@@ -111,11 +111,11 @@ public class WebAppTest {
 			testLeak(classLoaderReference);
 
 		} catch (ServletException e) {
-			throw new WebAppTestException(e);
+			throw new WebAppClassLoaderTestException(e);
 		} catch (LifecycleException e) {
-			throw new WebAppTestException(e);
+			throw new WebAppClassLoaderTestException(e);
 		} catch (MalformedURLException e) {
-			throw new WebAppTestException(e);
+			throw new WebAppClassLoaderTestException(e);
 		} finally {
 			shutdownTomcat(tomcat, destroyListener);
 		}
@@ -151,7 +151,7 @@ public class WebAppTest {
 	}
 
 	private void shutdownTomcat(Tomcat tomcat,
-	        final DestroyListener destroyListener) throws WebAppTestException {
+	        final DestroyListener destroyListener) throws WebAppClassLoaderTestException {
 		try {
 			if (tomcat != null) {
 				tomcat.stop();
@@ -167,7 +167,7 @@ public class WebAppTest {
 				        });
 			}
 		} catch (LifecycleException e) {
-			throw new WebAppTestException(e);
+			throw new WebAppClassLoaderTestException(e);
 		} finally {
 			delete(CATALINA_BASE);
 		}
@@ -187,7 +187,7 @@ public class WebAppTest {
 		}
 	}
 
-	private void ping(final URL url) throws WebAppTestException {
+	private void ping(final URL url) throws WebAppClassLoaderTestException {
 		LOG.info("Pinging {}", url);
 
 		try {
@@ -207,13 +207,13 @@ public class WebAppTest {
 				        }
 			        });
 		} catch (ConditionTimeoutException e) {
-			throw new WebAppTestException(
+			throw new WebAppClassLoaderTestException(
 			        "Web application not properly deployed", e);
 		}
 	}
 
 	private void testLeak(final WeakReference<ClassLoader> classLoaderReference)
-	        throws WebAppTestException {
+	        throws WebAppClassLoaderTestException {
 		if (!testLeak) {
 			return;
 		}
@@ -242,7 +242,7 @@ public class WebAppTest {
 				        e);
 				dumpHeap(dumpFile);
 			}
-			throw new WebAppTestException("ClassLoader not GC'ed", e);
+			throw new WebAppClassLoaderTestException("ClassLoader not GC'ed", e);
 		}
 	}
 
@@ -271,7 +271,7 @@ public class WebAppTest {
 	}
 
 	private static void dumpHeap(final File dumpFile)
-	        throws WebAppTestException {
+	        throws WebAppClassLoaderTestException {
 		String name = ManagementFactory.getRuntimeMXBean().getName();
 		String pid = name.substring(0, name.indexOf("@"));
 		String[] cmd =
@@ -280,9 +280,9 @@ public class WebAppTest {
 		try {
 			Runtime.getRuntime().exec(cmd).waitFor();
 		} catch (IOException e) {
-			throw new WebAppTestException("Could not dump heap", e);
+			throw new WebAppClassLoaderTestException("Could not dump heap", e);
 		} catch (InterruptedException e) {
-			throw new WebAppTestException("Could not dump heap", e);
+			throw new WebAppClassLoaderTestException("Could not dump heap", e);
 		}
 	}
 
