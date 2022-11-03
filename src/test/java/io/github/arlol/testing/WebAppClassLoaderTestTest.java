@@ -29,20 +29,26 @@ public class WebAppClassLoaderTestTest {
 	public void testSuccessfulWithContextXml() throws Exception {
 		File warFile = getClassPathResource("webapp-test-working.war");
 		File contextFile = getClassPathResource("tomcat-context-working.xml");
-		new WebAppClassLoaderTest().warFile(warFile).contextFile(contextFile).run();
+		new WebAppClassLoaderTest().warFile(warFile)
+				.contextFile(contextFile)
+				.run();
 	}
 
 	@Test(expected = WebAppClassLoaderTestException.class)
 	public void testFailingWithTimeout() throws Exception {
 		File warFile = getClassPathResource("webapp-test-working.war");
-		new WebAppClassLoaderTest().warFile(warFile).pingEndPoint("index.html").run();
+		new WebAppClassLoaderTest().warFile(warFile)
+				.pingEndPoint("index.html")
+				.run();
 	}
 
 	@Test(expected = WebAppClassLoaderTestException.class)
 	public void testFailingWithContextXml() throws Exception {
 		File warFile = getClassPathResource("webapp-test-working.war");
 		File contextFile = getClassPathResource("tomcat-context-bad.xml");
-		new WebAppClassLoaderTest().warFile(warFile).contextFile(contextFile).run();
+		new WebAppClassLoaderTest().warFile(warFile)
+				.contextFile(contextFile)
+				.run();
 	}
 
 	@Test(expected = WebAppClassLoaderTestException.class)
@@ -58,8 +64,8 @@ public class WebAppClassLoaderTestTest {
 	}
 
 	public File getClassPathResource(String path) throws Exception {
-		ClassLoader contextClassLoader =
-		        Thread.currentThread().getContextClassLoader();
+		ClassLoader contextClassLoader = Thread.currentThread()
+				.getContextClassLoader();
 		URL resource = contextClassLoader.getResource(path);
 		return new File(resource.toURI());
 	}

@@ -9,7 +9,7 @@ import org.slf4j.LoggerFactory;
 final class DestroyListener implements LifecycleListener {
 
 	private static final Logger LOG = LoggerFactory
-	        .getLogger(DestroyListener.class);
+			.getLogger(DestroyListener.class);
 
 	private boolean destroyed = false;
 	private boolean stopped = false;
