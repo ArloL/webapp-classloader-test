@@ -14,7 +14,7 @@
 	<version>${revision}</version>
 
 	<scm>
-		<connection>scm:git:https://github.com/ArloL/mvnx.git</connection>
+		<connection>scm:git:https://github.com/ArloL/webapp-classloader-test.git</connection>
 		<developerConnection>scm:git:https://github.com/ArloL/webapp-classloader-test.git</developerConnection>
 		<tag>${sha1}</tag>
 		<url>https://github.com/ArloL/webapp-classloader-test/</url>
