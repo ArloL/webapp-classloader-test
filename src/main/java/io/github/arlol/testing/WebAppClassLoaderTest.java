@@ -28,9 +28,8 @@ import org.apache.catalina.LifecycleState;
 import org.apache.catalina.core.JreMemoryLeakPreventionListener;
 import org.apache.catalina.core.ThreadLocalLeakPreventionListener;
 import org.apache.catalina.startup.Tomcat;
-
-import com.jayway.awaitility.Awaitility;
-import com.jayway.awaitility.core.ConditionTimeoutException;
+import org.awaitility.Awaitility;
+import org.awaitility.core.ConditionTimeoutException;
 
 import javassist.ClassPool;
 import javassist.CtClass;
