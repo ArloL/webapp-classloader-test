@@ -1,32 +1,35 @@
 package io.github.arlol.testing;
 
-import static com.jayway.awaitility.Awaitility.await;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
-import java.io.File;
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
+import java.lang.management.MemoryPoolMXBean;
 import java.lang.ref.WeakReference;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
+import java.net.URI;
 import java.net.URL;
 import java.net.URLConnection;
-import java.util.Arrays;
+import java.nio.file.FileVisitResult;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 
 import org.apache.catalina.Context;
 import org.apache.catalina.LifecycleException;
+import org.apache.catalina.LifecycleListener;
 import org.apache.catalina.LifecycleState;
 import org.apache.catalina.core.JreMemoryLeakPreventionListener;
-import org.apache.catalina.core.StandardContext;
 import org.apache.catalina.core.ThreadLocalLeakPreventionListener;
 import org.apache.catalina.startup.Tomcat;
-import org.apache.commons.io.FileUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import com.jayway.awaitility.Duration;
+import com.jayway.awaitility.Awaitility;
 import com.jayway.awaitility.core.ConditionTimeoutException;
 
 import javassist.ClassPool;
@@ -35,20 +38,40 @@ import javassist.Loader;
 
 public class WebAppClassLoaderTest {
 
-	private static final Logger LOG = LoggerFactory
-			.getLogger(WebAppClassLoaderTest.class);
-	private static final File CATALINA_BASE = new File("target/tomcat-tmp");
-	private static final int DEPLOY_DURATION = 10;
+	static {
+		for (MemoryPoolMXBean mbean : ManagementFactory
+				.getMemoryPoolMXBeans()) {
+			if ("Metaspace".equals(mbean.getName())
+					&& mbean.getUsage().getMax() == -1) {
+				throw new IllegalStateException(
+						"MaxMetaspaceSize is undefined. Include -XX:MaxMetaspaceSize=128m in JVM arguments."
+				);
+			}
+		}
+	}
 
-	private File warFile;
-	private String pingEndPoint = "index.jsp";
-	private File dumpFile;
-	private long deployDuration = DEPLOY_DURATION;
-	private File contextFile;
+	private Path catalinaBase;
+	private Path warPath;
+	private String pingEndPoint = "";
+	private int pingStatusCode = 200;
+	private long deployTimeoutInSeconds = 10;
+	private long stopTimeoutInSeconds = 60;
+	private long leakTestFirstTimeoutInSeconds = 30;
+	private long leakTestSecondTimeoutInSeconds = 120;
+	private URL contextConfig;
 	private boolean testLeak = true;
+	private final Map<String, String> contextParameters = new HashMap<>();
+	private CustomContextConfig customContextConfig;
 
-	public WebAppClassLoaderTest warFile(File warFile) {
-		this.warFile = warFile;
+	private Tomcat tomcat;
+	private DestroyListener destroyListener;
+	private Context context;
+	private WeakReference<ClassLoader> classLoaderReference;
+	private int port;
+	private String contextPath;
+
+	public WebAppClassLoaderTest warPath(Path warPath) {
+		this.warPath = warPath;
 		return this;
 	}
 
@@ -57,18 +80,61 @@ public class WebAppClassLoaderTest {
 		return this;
 	}
 
-	public WebAppClassLoaderTest dumpFile(File dumpFile) {
-		this.dumpFile = dumpFile;
+	public WebAppClassLoaderTest pingStatusCode(int pingStatusCode) {
+		this.pingStatusCode = pingStatusCode;
 		return this;
 	}
 
-	public WebAppClassLoaderTest deployDuration(long deployDuration) {
-		this.deployDuration = deployDuration;
+	public WebAppClassLoaderTest deployTimeoutInSeconds(long deployTimeoutInSeconds) {
+		this.deployTimeoutInSeconds = deployTimeoutInSeconds;
 		return this;
 	}
 
-	public WebAppClassLoaderTest contextFile(File contextFile) {
-		this.contextFile = contextFile;
+	public WebAppClassLoaderTest stopTimeoutInSeconds(long stopTimeoutInSeconds) {
+		this.stopTimeoutInSeconds = stopTimeoutInSeconds;
+		return this;
+	}
+
+	/**
+	 * @param leakTestFirstTimeoutInSeconds the period to wait for cleanup
+	 *                                      before starting to create new
+	 *                                      classes for GC pressure
+	 * @return the current WebAppTest
+	 */
+	public WebAppClassLoaderTest leakTestFirstTimeoutInSeconds(
+			long leakTestFirstTimeoutInSeconds
+	) {
+		this.leakTestFirstTimeoutInSeconds = leakTestFirstTimeoutInSeconds;
+		return this;
+	}
+
+	/**
+	 * @param leakTestSecondTimeoutInSeconds the period to wait for cleanup
+	 *                                       while creating new classes to put
+	 *                                       the GC under pressure
+	 * @return the current WebAppTest
+	 */
+	public WebAppClassLoaderTest leakTestSecondTimeoutInSeconds(
+			long leakTestSecondTimeoutInSeconds
+	) {
+		this.leakTestSecondTimeoutInSeconds = leakTestSecondTimeoutInSeconds;
+		return this;
+	}
+
+	public WebAppClassLoaderTest contextConfig(Path contextConfig) {
+		return this.contextConfig(contextConfig.toUri());
+	}
+
+	public WebAppClassLoaderTest contextConfig(URI contextConfig) {
+		try {
+			return this.contextConfig(contextConfig.toURL());
+		} catch (MalformedURLException e) {
+			throw new IllegalArgumentException(e);
+		}
+	}
+
+	public WebAppClassLoaderTest contextConfig(URL contextConfig) {
+		this.contextConfig = contextConfig;
 		return this;
 	}
 
@@ -77,69 +143,112 @@ public class WebAppClassLoaderTest {
 		return this;
 	}
 
-	public void run() throws WebAppClassLoaderTestException {
+	public WebAppClassLoaderTest contextParameter(String key, String value) {
+		contextParameters.put(key, value);
+		return this;
+	}
+
+	public int getPort() {
+		return port;
+	}
+
+	public String getContextPath() {
+		return contextPath;
+	}
+
+	public void start() throws WebAppClassLoaderTestException {
 		checkArguments();
 
-		Tomcat tomcat = null;
-		final DestroyListener destroyListener = new DestroyListener();
+		tomcat = null;
+		destroyListener = new DestroyListener();
 		try {
 			tomcat = getTomcatInstance();
 
-			Context context = tomcat
-					.addWebapp("/test", warFile.getAbsolutePath());
-
-			configureContext(context);
-
-			configureTomcat(tomcat, destroyListener);
+			configureTomcat();
 
 			tomcat.start();
 
-			checkContextStarted(context);
+			port = tomcat.getConnector().getLocalPort();
 
-			final WeakReference<ClassLoader> classLoaderReference = new WeakReference<>(
+			contextPath = "/" + UUID.randomUUID().toString();
+
+			customContextConfig = new CustomContextConfig(
+					contextConfig,
+					port,
+					contextPath,
+					contextParameters
+			);
+
+			context = tomcat.addWebapp(
+					tomcat.getHost(),
+					contextPath,
+					warPath.toAbsolutePath().toString(),
+					(LifecycleListener) customContextConfig
+			);
+
+			checkContextStarted();
+
+			classLoaderReference = new WeakReference<>(
 					context.getLoader().getClassLoader()
 			);
 
-			int port = tomcat.getConnector().getLocalPort();
-
-			final URL url = new URL(
-					"http",
-					"localhost",
-					port,
-					"/test/" + pingEndPoint
+			ping(
+					new URL(
+							"http",
+							"localhost",
+							port,
+							contextPath + "/" + pingEndPoint
+					)
 			);
-			ping(url);
 
-			tomcat.getHost().removeChild(context);
-			context = null;
+			Thread.sleep(2_500);
 
-			testLeak(classLoaderReference);
-
-		} catch (LifecycleException e) {
+		} catch (IOException | IllegalStateException | LifecycleException
+				| InterruptedException e) {
+			shutdownTomcat();
 			throw new WebAppClassLoaderTestException(e);
-		} catch (MalformedURLException e) {
-			throw new WebAppClassLoaderTestException(e);
+		}
+	}
+
+	public void stop() throws WebAppClassLoaderTestException {
+		try {
+			if (context != null) {
+				tomcat.getHost().removeChild(context);
+				// it is unnecessary to check whether the context was stopped
+				// since removeChild is a blocking call
+				context = null;
+			}
+
+			testLeak();
 		} finally {
-			shutdownTomcat(tomcat, destroyListener);
+			shutdownTomcat();
+		}
+	}
+
+	public void run() throws WebAppClassLoaderTestException {
+		try {
+			start();
+			stop();
+		} finally {
+			shutdownTomcat();
 		}
 	}
 
 	private void checkArguments() {
-		if (warFile == null) {
+		if (warPath == null) {
 			throw new IllegalArgumentException("warFile cannot be null");
 		}
 		if (pingEndPoint == null) {
 			throw new IllegalArgumentException("pingEndPoint cannot be null");
 		}
-		if (!warFile.exists()) {
+		if (!Files.exists(warPath)) {
 			throw new IllegalArgumentException(
-					"WAR file does not exist: " + warFile.getAbsolutePath()
+					"WAR file does not exist: " + warPath
 			);
 		}
 	}
 
-	private void checkContextStarted(Context context)
-			throws LifecycleException {
+	private void checkContextStarted() throws LifecycleException {
 		if (context.getState() != LifecycleState.STARTED) {
 			throw new LifecycleException(
 					"Context state is not STARTED but " + context.getStateName()
@@ -147,10 +256,7 @@ public class WebAppClassLoaderTest {
 		}
 	}
 
-	private void configureTomcat(
-			Tomcat tomcat,
-			final DestroyListener destroyListener
-	) {
+	private void configureTomcat() {
 		tomcat.getServer()
 				.addLifecycleListener(new JreMemoryLeakPreventionListener());
 		tomcat.getServer()
@@ -158,64 +264,44 @@ public class WebAppClassLoaderTest {
 		tomcat.getServer().addLifecycleListener(destroyListener);
 	}
 
-	private void shutdownTomcat(
-			Tomcat tomcat,
-			final DestroyListener destroyListener
-	) throws WebAppClassLoaderTestException {
+	private void shutdownTomcat() throws WebAppClassLoaderTestException {
 		try {
-			if (tomcat != null) {
+			Callable<Boolean> contextIsDestroyed = () -> destroyListener
+					.isDestroyed() && destroyListener.isStopped();
+			if (tomcat != null && !contextIsDestroyed.call()) {
 				tomcat.stop();
 				tomcat.destroy();
-				await().atMost(Duration.ONE_MINUTE)
-						.until(new Callable<Boolean>() {
-
-							@Override
-							public Boolean call() throws Exception {
-								return destroyListener.isDestroyed()
-										&& destroyListener.isStopped();
-							}
-
-						});
+				Awaitility.await()
+						.atMost(stopTimeoutInSeconds, SECONDS)
+						.until(contextIsDestroyed);
 			}
-		} catch (LifecycleException e) {
+		} catch (Exception e) {
 			throw new WebAppClassLoaderTestException(e);
 		} finally {
-			delete(CATALINA_BASE);
-		}
-	}
-
-	private void configureContext(Context context)
-			throws MalformedURLException {
-		if (contextFile != null) {
-			context.setConfigFile(contextFile.toURI().toURL());
-		}
-
-		if (context instanceof StandardContext) {
-			StandardContext standardContext = (StandardContext) context;
-			standardContext.setClearReferencesHttpClientKeepAliveThread(true);
-			standardContext.setClearReferencesStopThreads(true);
-			standardContext.setClearReferencesStopTimerThreads(true);
+			if (customContextConfig != null) {
+				customContextConfig.configureStop();
+				customContextConfig.destroy();
+			}
+			try {
+				delete(catalinaBase);
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
 		}
 	}
 
 	private void ping(final URL url) throws WebAppClassLoaderTestException {
-		LOG.info("Pinging {}", url);
-
 		try {
-			await().atMost(new Duration(deployDuration, SECONDS))
-					.pollInterval(Duration.ONE_SECOND)
-					.until(new Callable<Boolean>() {
-
-						@Override
-						public Boolean call() throws Exception {
-							URLConnection connection = url.openConnection();
-							if (connection instanceof HttpURLConnection) {
-								HttpURLConnection httpConnection = (HttpURLConnection) connection;
-								return httpConnection.getResponseCode() == 200;
-							}
-							return false;
+			Awaitility.await()
+					.atMost(deployTimeoutInSeconds, SECONDS)
+					.until((Callable<Boolean>) () -> {
+						URLConnection connection = url.openConnection();
+						if (connection instanceof HttpURLConnection) {
+							HttpURLConnection httpConnection = (HttpURLConnection) connection;
+							return httpConnection
+									.getResponseCode() == pingStatusCode;
 						}
-
+						return false;
 					});
 		} catch (ConditionTimeoutException e) {
 			throw new WebAppClassLoaderTestException(
@@ -225,41 +311,48 @@ public class WebAppClassLoaderTest {
 		}
 	}
 
-	private void testLeak(final WeakReference<ClassLoader> classLoaderReference)
-			throws WebAppClassLoaderTestException {
-		if (!testLeak) {
+	private void testLeak() throws WebAppClassLoaderTestException {
+		if (!testLeak || classLoaderReference == null) {
 			return;
 		}
-		LOG.info("Waiting for GC");
 
-		Callable<Boolean> classLoaderReferenceIsNull = new Callable<Boolean>() {
+		Callable<Boolean> classLoaderReferenceIsNull = () -> classLoaderReference
+				.get() == null;
 
-			@Override
-			public Boolean call() throws Exception {
-				return classLoaderReference.get() == null;
-			}
+		forceGc(3);
 
-		};
+		try {
+			Awaitility.await()
+					.atMost(leakTestFirstTimeoutInSeconds, SECONDS)
+					.until(classLoaderReferenceIsNull);
+		} catch (ConditionTimeoutException e) {
+			// ignore
+		}
 
-		System.gc();
+		forceGc(3);
 
 		createClassesUntil(classLoaderReferenceIsNull);
 
 		try {
-			await().atMost(Duration.TWO_MINUTES)
+			Awaitility.await()
+					.atMost(leakTestSecondTimeoutInSeconds, SECONDS)
 					.until(classLoaderReferenceIsNull);
 		} catch (ConditionTimeoutException e) {
-			if (dumpFile != null) {
-				LOG.error(
-						"ClassLoader not GC'ed. Dumping heap for further analysis.",
-						e
-				);
-				dumpHeap(dumpFile);
-			}
-			throw new WebAppClassLoaderTestException(
-					"ClassLoader not GC'ed",
-					e
-			);
+			throw new WebAppClassLoaderTestException("ClassLoader not GC'ed", e);
+		}
+	}
+
+	private void forceGc(int n) {
+		for (int i = 0; i < n; i++) {
+			forceGc();
+		}
+	}
+
+	private void forceGc() {
+		WeakReference<Object> ref = new WeakReference<>(new Object());
+		// Until garbage collection has actually been run
+		while (ref.get() != null) {
+			System.gc();
 		}
 	}
 
@@ -281,76 +374,57 @@ public class WebAppClassLoaderTest {
 								this.getClass().getProtectionDomain()
 						);
 					}
-				} catch (Exception e) {
-					LOG.error(e.getMessage(), e);
+				} catch (Throwable t) {
+					t.printStackTrace();
 				}
-				LOG.info("Done filling PermGen/Metaspace");
 			}
 
 		}.start();
 	}
 
-	private static void dumpHeap(final File dumpFile)
-			throws WebAppClassLoaderTestException {
-		String name = ManagementFactory.getRuntimeMXBean().getName();
-		String pid = name.substring(0, name.indexOf("@"));
-		String[] cmd = { "jmap", "-dump:file=" + dumpFile.getAbsolutePath(),
-				pid };
-		LOG.info(Arrays.asList(cmd).toString());
-		try {
-			Runtime.getRuntime().exec(cmd).waitFor();
-		} catch (IOException e) {
-			throw new WebAppClassLoaderTestException("Could not dump heap", e);
-		} catch (InterruptedException e) {
-			throw new WebAppClassLoaderTestException("Could not dump heap", e);
-		}
-	}
+	private Tomcat getTomcatInstance() throws IOException {
+		catalinaBase = Files
+				.createTempDirectory("tomcat-classloader-leak-test");
 
-	private static Tomcat getTomcatInstance() {
-		if (CATALINA_BASE.exists() && !delete(CATALINA_BASE)) {
-			throw new IllegalStateException(
-					"Unable to delete existing temporary directory for test"
-			);
-		}
-		if (!CATALINA_BASE.mkdirs() && !CATALINA_BASE.isDirectory()) {
-			throw new IllegalStateException(
-					"Unable to create temporary directory for test"
-			);
-		}
+		delete(catalinaBase);
 
-		File appBase = new File(CATALINA_BASE, "webapps");
-		if (!appBase.mkdir() && !appBase.isDirectory()) {
-			throw new IllegalStateException(
-					"Unable to create appBase for test"
-			);
-		}
+		Path appBase = catalinaBase.resolve("webapps");
+		Files.createDirectories(appBase);
 
 		Tomcat tomcat = new Tomcat();
 		tomcat.setPort(0);
 
-		tomcat.setBaseDir(CATALINA_BASE.getAbsolutePath());
-		tomcat.getHost().setAppBase(appBase.getAbsolutePath());
+		tomcat.setBaseDir(catalinaBase.toAbsolutePath().toString());
+		tomcat.getHost().setAppBase(appBase.toAbsolutePath().toString());
 
 		tomcat.enableNaming();
 
 		return tomcat;
 	}
 
-	private static boolean delete(File file) {
-		// Check if file is directory/folder
-		if (file.isDirectory()) {
-			try {
-				// Delete directory
-				FileUtils.deleteDirectory(file);
-				return true;
-			} catch (IOException e) {
-				LOG.error(e.getMessage(), e);
-				return false;
-			}
-		} else {
-			// Delete the file if it is not a folder
-			return file.delete();
+	private static void delete(Path file) throws IOException {
+		if (file == null || !Files.exists(file)) {
+			return;
 		}
+		Files.walkFileTree(file, new SimpleFileVisitor<Path>() {
+
+			@Override
+			public FileVisitResult visitFile(
+					Path file,
+					BasicFileAttributes attrs
+			) throws IOException {
+				Files.delete(file);
+				return FileVisitResult.CONTINUE;
+			}
+
+			@Override
+			public FileVisitResult postVisitDirectory(Path dir, IOException exc)
+					throws IOException {
+				Files.delete(dir);
+				return FileVisitResult.CONTINUE;
+			}
+
+		});
 	}
 
 }
