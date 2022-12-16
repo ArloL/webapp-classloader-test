@@ -9,7 +9,7 @@
 		<version>2.7.5</version>
 	</parent>
 
-	<groupId>de.evosec</groupId>
+	<groupId>io.github.arlol</groupId>
 	<artifactId>webapp-test-keystore</artifactId>
 	<packaging>war</packaging>
 	<version>0.0.1-SNAPSHOT</version>
