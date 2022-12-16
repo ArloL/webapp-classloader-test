@@ -84,12 +84,16 @@ public class WebAppClassLoaderTest {
 		return this;
 	}
 
-	public WebAppClassLoaderTest deployTimeoutInSeconds(long deployTimeoutInSeconds) {
+	public WebAppClassLoaderTest deployTimeoutInSeconds(
+			long deployTimeoutInSeconds
+	) {
 		this.deployTimeoutInSeconds = deployTimeoutInSeconds;
 		return this;
 	}
 
-	public WebAppClassLoaderTest stopTimeoutInSeconds(long stopTimeoutInSeconds) {
+	public WebAppClassLoaderTest stopTimeoutInSeconds(
+			long stopTimeoutInSeconds
+	) {
 		this.stopTimeoutInSeconds = stopTimeoutInSeconds;
 		return this;
 	}
@@ -337,7 +341,10 @@ public class WebAppClassLoaderTest {
 					.atMost(leakTestSecondTimeoutInSeconds, SECONDS)
 					.until(classLoaderReferenceIsNull);
 		} catch (ConditionTimeoutException e) {
-			throw new WebAppClassLoaderTestException("ClassLoader not GC'ed", e);
+			throw new WebAppClassLoaderTestException(
+					"ClassLoader not GC'ed",
+					e
+			);
 		}
 	}
 
