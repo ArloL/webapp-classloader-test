@@ -5,6 +5,7 @@ set -o nounset
 set -o xtrace
 
 set -- \
+	webapp-test-bad-context \
     webapp-test-keystore
 
 cd "$(dirname "$0")" || exit 1
