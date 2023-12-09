@@ -31,6 +31,7 @@ import org.apache.catalina.startup.Tomcat;
 import org.awaitility.Awaitility;
 import org.awaitility.core.ConditionTimeoutException;
 
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import javassist.ClassPool;
 import javassist.CtClass;
 import javassist.Loader;
@@ -160,14 +161,24 @@ public class WebAppClassLoaderTest {
 	}
 
 	public void start() throws WebAppClassLoaderTestException {
-		checkArguments();
+		if (warPath == null) {
+			throw new IllegalArgumentException("warFile cannot be null");
+		}
+		if (pingEndPoint == null) {
+			throw new IllegalArgumentException("pingEndPoint cannot be null");
+		}
+		if (!Files.exists(warPath)) {
+			throw new IllegalArgumentException(
+					"WAR file does not exist: " + warPath
+			);
+		}
 
 		tomcat = null;
 		destroyListener = new DestroyListener();
 		try {
 			tomcat = getTomcatInstance();
 
-			configureTomcat();
+			configureTomcat(tomcat);
 
 			tomcat.start();
 
@@ -189,7 +200,7 @@ public class WebAppClassLoaderTest {
 					(LifecycleListener) customContextConfig
 			);
 
-			checkContextStarted();
+			checkContextStarted(context);
 
 			classLoaderReference = new WeakReference<>(
 					context.getLoader().getClassLoader()
@@ -215,7 +226,7 @@ public class WebAppClassLoaderTest {
 
 	public void stop() throws WebAppClassLoaderTestException {
 		try {
-			if (context != null) {
+			if (context != null && tomcat != null) {
 				tomcat.getHost().removeChild(context);
 				// it is unnecessary to check whether the context was stopped
 				// since removeChild is a blocking call
@@ -237,21 +248,8 @@ public class WebAppClassLoaderTest {
 		}
 	}
 
-	private void checkArguments() {
-		if (warPath == null) {
-			throw new IllegalArgumentException("warFile cannot be null");
-		}
-		if (pingEndPoint == null) {
-			throw new IllegalArgumentException("pingEndPoint cannot be null");
-		}
-		if (!Files.exists(warPath)) {
-			throw new IllegalArgumentException(
-					"WAR file does not exist: " + warPath
-			);
-		}
-	}
-
-	private void checkContextStarted() throws LifecycleException {
+	private void checkContextStarted(Context context)
+			throws LifecycleException {
 		if (context.getState() != LifecycleState.STARTED) {
 			throw new LifecycleException(
 					"Context state is not STARTED but " + context.getStateName()
@@ -259,7 +257,7 @@ public class WebAppClassLoaderTest {
 		}
 	}
 
-	private void configureTomcat() {
+	private void configureTomcat(Tomcat tomcat) {
 		tomcat.getServer()
 				.addLifecycleListener(new JreMemoryLeakPreventionListener());
 		tomcat.getServer()
@@ -269,8 +267,11 @@ public class WebAppClassLoaderTest {
 
 	private void shutdownTomcat() throws WebAppClassLoaderTestException {
 		try {
-			Callable<Boolean> contextIsDestroyed = () -> destroyListener
-					.isDestroyed() && destroyListener.isStopped();
+
+			Callable<Boolean> contextIsDestroyed = () -> {
+				return destroyListener != null && destroyListener.isDestroyed()
+						&& destroyListener.isStopped();
+			};
 			if (tomcat != null && !contextIsDestroyed.call()) {
 				tomcat.stop();
 				tomcat.destroy();
@@ -319,8 +320,8 @@ public class WebAppClassLoaderTest {
 			return;
 		}
 
-		Callable<Boolean> classLoaderReferenceIsNull = () -> classLoaderReference
-				.get() == null;
+		Callable<Boolean> classLoaderReferenceIsNull = () -> classLoaderReference != null
+				&& classLoaderReference.get() == null;
 
 		forceGc(3);
 
@@ -354,6 +355,7 @@ public class WebAppClassLoaderTest {
 		}
 	}
 
+	@SuppressFBWarnings("DM_GC")
 	private void forceGc() {
 		WeakReference<Object> ref = new WeakReference<>(new Object());
 		// Until garbage collection has actually been run

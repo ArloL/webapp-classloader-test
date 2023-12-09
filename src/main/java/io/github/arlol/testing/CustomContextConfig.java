@@ -1,6 +1,7 @@
 package io.github.arlol.testing;
 
 import java.net.URL;
+import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.catalina.core.StandardContext;
@@ -23,7 +24,7 @@ public class CustomContextConfig extends ContextConfig {
 		this.contextConfig = contextConfig;
 		this.port = port;
 		this.contextPath = contextPath;
-		this.contextParameters = contextParameters;
+		this.contextParameters = new HashMap<>(contextParameters);
 	}
 
 	@Override
