@@ -105,6 +105,52 @@
 					</execution>
 				</executions>
 			</plugin>
+			<plugin>
+				<groupId>net.revelc.code.formatter</groupId>
+				<artifactId>formatter-maven-plugin</artifactId>
+				<version>2.23.0</version>
+				<configuration>
+					<configFile>${project.basedir}/.settings/code-formatter-profile.xml</configFile>
+				</configuration>
+				<executions>
+					<execution>
+						<goals>
+							<goal>format</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+			<plugin>
+				<groupId>com.github.spotbugs</groupId>
+				<artifactId>spotbugs-maven-plugin</artifactId>
+				<version>4.8.2.0</version>
+				<configuration>
+					<effort>Max</effort>
+					<threshold>Low</threshold>
+				</configuration>
+				<executions>
+					<execution>
+						<goals>
+							<goal>check</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+			<plugin>
+				<groupId>org.gaul</groupId>
+				<artifactId>modernizer-maven-plugin</artifactId>
+				<version>2.7.0</version>
+				<configuration>
+					<javaVersion>${java.version}</javaVersion>
+				</configuration>
+				<executions>
+					<execution>
+						<goals>
+							<goal>modernizer</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
 		</plugins>
 		<pluginManagement>
 			<plugins>
