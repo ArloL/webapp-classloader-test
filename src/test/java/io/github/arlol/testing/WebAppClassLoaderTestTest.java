@@ -30,20 +30,26 @@ public class WebAppClassLoaderTestTest {
 	public void testSuccessfulWithContextXml() throws Exception {
 		Path warPath = getClassPathResource("webapp-test-working.war");
 		Path contextConfig = getClassPathResource("tomcat-context-working.xml");
-		new WebAppClassLoaderTest().warPath(warPath).contextConfig(contextConfig).start();
+		new WebAppClassLoaderTest().warPath(warPath)
+				.contextConfig(contextConfig)
+				.start();
 	}
 
 	@Test(expected = WebAppClassLoaderTestException.class)
 	public void testFailingWithTimeout() throws Exception {
 		Path warPath = getClassPathResource("webapp-test-working.war");
-		new WebAppClassLoaderTest().warPath(warPath).pingEndPoint("index.html").start();
+		new WebAppClassLoaderTest().warPath(warPath)
+				.pingEndPoint("index.html")
+				.start();
 	}
 
 	@Test(expected = WebAppClassLoaderTestException.class)
 	public void testFailingWithContextXml() throws Exception {
 		Path warPath = getClassPathResource("webapp-test-working.war");
 		Path contextConfig = getClassPathResource("tomcat-context-bad.xml");
-		new WebAppClassLoaderTest().warPath(warPath).contextConfig(contextConfig).start();
+		new WebAppClassLoaderTest().warPath(warPath)
+				.contextConfig(contextConfig)
+				.start();
 	}
 
 	@Test(expected = WebAppClassLoaderTestException.class)

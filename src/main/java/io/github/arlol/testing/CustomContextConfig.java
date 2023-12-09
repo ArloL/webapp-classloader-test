@@ -14,8 +14,12 @@ public class CustomContextConfig extends ContextConfig {
 	private final String contextPath;
 	private final Map<String, String> contextParameters;
 
-	public CustomContextConfig(URL contextConfig, int port, String contextPath,
-	        Map<String, String> contextParameters) {
+	public CustomContextConfig(
+			URL contextConfig,
+			int port,
+			String contextPath,
+			Map<String, String> contextParameters
+	) {
 		this.contextConfig = contextConfig;
 		this.port = port;
 		this.contextPath = contextPath;
