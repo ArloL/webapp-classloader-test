@@ -33,7 +33,6 @@ import org.awaitility.core.ConditionTimeoutException;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import javassist.ClassPool;
-import javassist.CtClass;
 import javassist.Loader;
 
 public class WebAppClassLoaderTest {
@@ -369,25 +368,8 @@ public class WebAppClassLoaderTest {
 	) {
 		final ClassLoader classLoader = new Loader.Simple();
 		final ClassPool pool = ClassPool.getDefault();
-		new Thread("classCreator") {
-
-			@Override
-			public void run() {
-				try {
-					while (!classLoaderReferenceIsNull.call()) {
-						CtClass makeClass = pool
-								.makeClass("de.test." + UUID.randomUUID());
-						makeClass.toClass(
-								classLoader,
-								this.getClass().getProtectionDomain()
-						);
-					}
-				} catch (Throwable t) {
-					t.printStackTrace();
-				}
-			}
-
-		}.start();
+		new ClassCreatorThread(classLoaderReferenceIsNull, pool, classLoader)
+				.start();
 	}
 
 	private Tomcat getTomcatInstance() throws IOException {
