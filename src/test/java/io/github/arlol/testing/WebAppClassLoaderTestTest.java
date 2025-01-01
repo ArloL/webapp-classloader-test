@@ -2,7 +2,6 @@ package io.github.arlol.testing;
 
 import java.net.URI;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 
 import org.junit.Test;
 
@@ -68,7 +67,7 @@ public class WebAppClassLoaderTestTest {
 		ClassLoader contextClassLoader = Thread.currentThread()
 				.getContextClassLoader();
 		URI uri = contextClassLoader.getResource(path).toURI();
-		return Paths.get(uri);
+		return Path.of(uri);
 	}
 
 }
