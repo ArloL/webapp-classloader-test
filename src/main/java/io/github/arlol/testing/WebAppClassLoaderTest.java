@@ -206,11 +206,9 @@ public class WebAppClassLoaderTest {
 			);
 
 			ping(
-					new URL(
-							"http",
-							"localhost",
-							port,
-							contextPath + "/" + pingEndPoint
+					URI.create(
+							"http://localhost:%s/%s/%s"
+									.formatted(port, contextPath, pingEndPoint)
 					)
 			);
 
@@ -293,12 +291,12 @@ public class WebAppClassLoaderTest {
 		}
 	}
 
-	private void ping(final URL url) throws WebAppClassLoaderTestException {
+	private void ping(final URI uri) throws WebAppClassLoaderTestException {
 		try {
 			Awaitility.await()
 					.atMost(deployTimeoutInSeconds, SECONDS)
 					.until((Callable<Boolean>) () -> {
-						URLConnection connection = url.openConnection();
+						URLConnection connection = uri.toURL().openConnection();
 						if (connection instanceof HttpURLConnection) {
 							HttpURLConnection httpConnection = (HttpURLConnection) connection;
 							return httpConnection
