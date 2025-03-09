@@ -9,6 +9,7 @@ on:
     - main
   schedule:
   - cron: '44 23 17 * *'
+permissions: {}
 env:
   JAVA_VERSION: 21
 
@@ -58,6 +59,8 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4.2.2
+      with:
+        persist-credentials: false
     - uses: actions/setup-java@v4.7.0
       with:
         java-version: ${{ env.JAVA_VERSION }}
