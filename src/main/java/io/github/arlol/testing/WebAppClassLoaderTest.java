@@ -381,9 +381,11 @@ public class WebAppClassLoaderTest {
 				.start();
 	}
 
+	// createTempDirectory already creates the directory 0700 with a
+	// SecureRandom name; the rule only checks the argument count.
+	@SuppressWarnings("java:S5443")
 	private Tomcat getTomcatInstance() throws IOException {
-		// createTempDirectory creates the directory with owner-only
-		// permissions; deleting and recreating it would drop them
+		// Deleting and recreating this directory would drop those permissions
 		catalinaBase = Files
 				.createTempDirectory("tomcat-classloader-leak-test");
 
