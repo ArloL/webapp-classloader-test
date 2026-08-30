@@ -1,5 +1,7 @@
 package io.github.arlol.testing;
 
+import java.lang.System.Logger;
+import java.lang.System.Logger.Level;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 
@@ -7,6 +9,9 @@ import javassist.ClassPool;
 import javassist.CtClass;
 
 public class ClassCreatorThread extends Thread {
+
+	private static final Logger LOGGER = System
+			.getLogger(ClassCreatorThread.class.getName());
 
 	private final Callable<Boolean> classLoaderReferenceIsNull;
 	private final ClassPool pool;
@@ -35,7 +40,7 @@ public class ClassCreatorThread extends Thread {
 				);
 			}
 		} catch (Throwable t) {
-			t.printStackTrace();
+			LOGGER.log(Level.ERROR, "Stopped creating classes", t);
 		}
 	}
 
