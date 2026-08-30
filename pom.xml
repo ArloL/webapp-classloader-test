@@ -45,9 +45,12 @@
 				<artifactId>maven-surefire-plugin</artifactId>
 				<configuration>
 					<!-- @{argLine} carries JaCoCo's agent; a plain override would
-						drop it and leave the coverage report empty -->
+						drop it and leave the coverage report empty.
+						Opening java.base/java.lang is what javassist needs to
+						define classes, and what Tomcat needs for ThreadLocal and
+						RMI target leak detection -->
 					<argLine>
-						<![CDATA[@{argLine} -XX:MaxMetaspaceSize=128m]]>
+						<![CDATA[@{argLine} -XX:MaxMetaspaceSize=128m --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.rmi/sun.rmi.transport=ALL-UNNAMED]]>
 					</argLine>
 				</configuration>
 			</plugin>

@@ -220,8 +220,12 @@ public class WebAppClassLoaderTest {
 			Thread.sleep(2_500);
 
 		} catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
-			shutdownTomcat();
+			try {
+				// shutting down consumes the interrupt, so restore it after
+				shutdownTomcat();
+			} finally {
+				Thread.currentThread().interrupt();
+			}
 			throw new WebAppClassLoaderTestException(e);
 		} catch (IOException | IllegalStateException | LifecycleException e) {
 			shutdownTomcat();
@@ -291,15 +295,7 @@ public class WebAppClassLoaderTest {
 				customContextConfig.configureStop();
 				customContextConfig.destroy();
 			}
-			try {
-				delete(catalinaBase);
-			} catch (IOException e) {
-				LOGGER.log(
-						Level.WARNING,
-						"Failed to delete " + catalinaBase,
-						e
-				);
-			}
+			deleteQuietly(catalinaBase);
 		}
 	}
 
@@ -403,6 +399,18 @@ public class WebAppClassLoaderTest {
 		tomcat.enableNaming();
 
 		return tomcat;
+	}
+
+	/**
+	 * Cleaning up the temporary directory must not mask the failure that is
+	 * being reported.
+	 */
+	static void deleteQuietly(Path file) {
+		try {
+			delete(file);
+		} catch (IOException e) {
+			LOGGER.log(Level.WARNING, "Failed to delete " + file, e);
+		}
 	}
 
 	private static void delete(Path file) throws IOException {
