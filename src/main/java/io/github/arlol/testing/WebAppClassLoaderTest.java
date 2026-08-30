@@ -3,6 +3,8 @@ package io.github.arlol.testing;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 import java.io.IOException;
+import java.lang.System.Logger;
+import java.lang.System.Logger.Level;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryPoolMXBean;
 import java.lang.ref.WeakReference;
@@ -36,6 +38,9 @@ import javassist.ClassPool;
 import javassist.Loader;
 
 public class WebAppClassLoaderTest {
+
+	private static final Logger LOGGER = System
+			.getLogger(WebAppClassLoaderTest.class.getName());
 
 	static {
 		for (MemoryPoolMXBean mbean : ManagementFactory
@@ -214,8 +219,11 @@ public class WebAppClassLoaderTest {
 
 			Thread.sleep(2_500);
 
-		} catch (IOException | IllegalStateException | LifecycleException
-				| InterruptedException e) {
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			shutdownTomcat();
+			throw new WebAppClassLoaderTestException(e);
+		} catch (IOException | IllegalStateException | LifecycleException e) {
 			shutdownTomcat();
 			throw new WebAppClassLoaderTestException(e);
 		}
@@ -286,7 +294,11 @@ public class WebAppClassLoaderTest {
 			try {
 				delete(catalinaBase);
 			} catch (IOException e) {
-				e.printStackTrace();
+				LOGGER.log(
+						Level.WARNING,
+						"Failed to delete " + catalinaBase,
+						e
+				);
 			}
 		}
 	}
@@ -352,7 +364,10 @@ public class WebAppClassLoaderTest {
 		}
 	}
 
+	// The explicit collection is the point of this tool: a class loader can
+	// only be declared leaked once the GC has had a chance to reclaim it.
 	@SuppressFBWarnings("DM_GC")
+	@SuppressWarnings("java:S1215")
 	private void forceGc() {
 		WeakReference<Object> ref = new WeakReference<>(new Object());
 		// Until garbage collection has actually been run
@@ -371,10 +386,10 @@ public class WebAppClassLoaderTest {
 	}
 
 	private Tomcat getTomcatInstance() throws IOException {
+		// createTempDirectory creates the directory with owner-only
+		// permissions; deleting and recreating it would drop them
 		catalinaBase = Files
 				.createTempDirectory("tomcat-classloader-leak-test");
-
-		delete(catalinaBase);
 
 		Path appBase = catalinaBase.resolve("webapps");
 		Files.createDirectories(appBase);
